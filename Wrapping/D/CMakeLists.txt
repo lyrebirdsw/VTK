@@ -1,5 +1,5 @@
-find_package(D REQUIRED)
-find_package(JNI REQUIRED)
+# Set the D compiler and libraries here
+# find_package(D REQUIRED)
 
 include_directories(${D_INCLUDE_PATH} ${D_INCLUDE_PATH2})
 
@@ -12,62 +12,21 @@ if(VTK_D_INSTALL)
      set(CMAKE_INSTALL_NAME_DIR @loader_path CACHE STRING "" FORCE)
      mark_as_advanced(CMAKE_INSTALL_NAME_DIR)
   endif()
-  if(NOT MAVEN_LOCAL_NATIVE_NAME)
-    set(MAVEN_LOCAL_NATIVE_NAME "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" CACHE STRING "")
-  endif()
-  if(NOT MAVEN_NATIVE_ARTIFACTS)
-    set(MAVEN_NATIVE_ARTIFACTS "${MAVEN_LOCAL_NATIVE_NAME}" CACHE STRING "")
-  endif()
-  if(NOT MAVEN_LOCAL_REPOSITORY)
-    set(MAVEN_LOCAL_REPOSITORY "\${user.home}/vtk-maven-repos" CACHE STRING "")
-  endif()
-  if(NOT MAVEN_VTK_GROUP_ID)
-    set(MAVEN_VTK_GROUP_ID "kitware.community" CACHE STRING "")
-  endif()
-  mark_as_advanced(MAVEN_LOCAL_REPOSITORY MAVEN_NATIVE_ARTIFACTS MAVEN_LOCAL_NATIVE_NAME MAVEN_VTK_GROUP_ID)
-  set(MAVEN_DEPENDENCY_XML)
 endif()
 
+# CHANGE TO DWT  
 # Add the option for build the SWT component to VTK.
-option(VTK_D_SWT_COMPONENT "Should SWT component for D be built (it requires Eclipse)?" OFF)
-
-if(VTK_D_SWT_COMPONENT)
-  find_package(SWT REQUIRED)
-endif()
-
-# Add the option for build the JOGL component to VTK.
-set(JOGL_VERSION "2.0.2")
-option(VTK_D_JOGL_COMPONENT "Need JOGL jar files" OFF)
-
-if(VTK_D_JOGL_COMPONENT)
-  set(MAVEN_REPO "$ENV{HOME}/.m2/repository")
-  find_file(JOGL_LIB jogl-all-${JOGL_VERSION}.jar PATHS ${MAVEN_REPO}/org/jogamp/jogl/jogl-all/${JOGL_VERSION} )
-  find_file(JOGL_GLUE gluegen-rt-${JOGL_VERSION}.jar PATHS ${MAVEN_REPO}/org/jogamp/gluegen/gluegen-rt/${JOGL_VERSION})
-  mark_as_advanced(JOGL_LIB JOGL_GLUE)
-  if(NOT JOGL_LIB)
-     message(ERROR "
-     CMake can not build VTK with VTK_D_JOGL_COMPONENT ON if the JOGL jar file is not provided.
-     Please set the JOGL_LIB variable.
-     ")
-  endif()
-  if(NOT JOGL_GLUE)
-     message(ERROR "
-     CMake can not build VTK with VTK_D_JOGL_COMPONENT ON if the GLUE jar file is not provided.
-     Please set the JOGL_GLUE variable.
-     ")
-  endif()
-endif()
+#option(VTK_D_SWT_COMPONENT "Should SWT component for D be built (it requires Eclipse)?" OFF)
+#
+#if(VTK_D_SWT_COMPONENT)
+#  find_package(SWT REQUIRED)
+#endif()
 
 set(WrappingD_SRCS
   vtkDUtil.cxx
   )
 
 vtk_module_library(vtkWrappingD ${WrappingD_SRCS})
-
-# dc runs out memory on Mac so increase heapsize
-if(APPLE)
-  set(DC_OPTIONS -J-Xmx512m)
-endif()
 
 foreach(module ${VTK_MODULES_ENABLED})
   if(NOT ${module}_EXCLUDE_FROM_WRAPPING)
@@ -76,40 +35,22 @@ foreach(module ${VTK_MODULES_ENABLED})
   endif()
 endforeach()
 
-if(NOT VTK_JAR_PATH)
-  set(VTK_JAR_PATH "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+if(NOT VTK_DLIB_PATH)
+  set(VTK_DLIB_PATH "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 endif()
 
 set(VTK_D_SOURCE_FILES ${VTK_D_DEPENDENCIES})
-string(REGEX REPLACE "\\.d" ".class;" VTK_D_CLASS_FILES ${VTK_D_SOURCE_FILES})
 
 # Setup custom targets
 if (BUILD_TESTING)
   add_custom_target(VTKDTestClasses ALL DEPENDS ${VTK_BINARY_DIR}/d/dc_tests_stamp.txt)
 endif()
-add_custom_target(VTKDJar ALL DEPENDS ${VTK_JAR_PATH}/vtk.jar)
+add_custom_target(VTKDLib ALL DEPENDS ${VTK_JAR_PATH}/vtkd.lib)
 add_custom_target(VTKDClasses ALL DEPENDS ${VTK_BINARY_DIR}/d/dc_stamp.txt)
 
-add_dependencies(VTKDJar VTKDClasses)
+add_dependencies(VTKDLib VTKDClasses)
 if (BUILD_TESTING)
-  add_dependencies(VTKDTestClasses VTKDJar)
-endif()
-# Some platforms have libjvm in a subdirectory from
-# the rest of the d libraries and are missing the symlink.
-
-if(D_AWT_LIBRARY)
-  foreach(__d_library ${D_AWT_LIBRARY})
-    get_filename_component(D_LIB_DIR ${__d_library} PATH)
-    if(EXISTS ${D_LIB_DIR}/xawt)
-      link_directories(${D_LIB_DIR}/xawt)
-    endif()
-    if(EXISTS ${D_LIB_DIR}/client)
-       link_directories(${D_LIB_DIR}/client)
-    endif()
-    if(EXISTS ${D_LIB_DIR}/server)
-      link_directories(${D_LIB_DIR}/server)
-    endif()
-  endforeach()
+  add_dependencies(VTKDTestClasses VTKDLib)
 endif()
 
 set(CMAKE_SKIP_RPATH 0)
@@ -122,22 +63,12 @@ foreach(module ${_MODULES_TO_WRAP})
 
   string(REGEX REPLACE "^vtk" "" _module_no_prefix "${module}")
 
-  if(APPLE AND NOT VTK_D_INSTALL)
-    set(src ${VTK_JAR_PATH}/libvtk${_module_no_prefix}D.dylib)
-    set(tgt ${VTK_JAR_PATH}/libvtk${_module_no_prefix}D.jnilib)
-    add_custom_command(OUTPUT ${tgt}
-                       COMMAND ln
-                       ARGS -sf ${src} ${tgt}
-                       DEPENDS ${src})
-    set(D_LIBRARIES ${D_LIBRARIES} ${tgt})
-  endif()
-
   target_link_libraries(VTKDExecutable ${module}D)
 
   add_custom_target(VTKD${_module_no_prefix} ALL)
   add_dependencies(VTKD${_module_no_prefix} VTKDExecutable)
   add_dependencies(VTKD${_module_no_prefix} ${module}DDClasses)
-  add_dependencies(VTKDJar VTKD${_module_no_prefix})
+  add_dependencies(VTKDLib VTKD${_module_no_prefix})
   # Make sure all .d files are build before any .class files are built.
   foreach(otherModule ${_MODULES_TO_WRAP})
     add_dependencies(VTKD${_module_no_prefix} ${otherModule}DDClasses)
@@ -304,7 +235,7 @@ if(JOGL_GLUE)
     set(D_COMPILATION_CLASSPATH "${D_COMPILATION_CLASSPATH}${SEPARATOR}${JOGL_GLUE}")
 endif()
 
-# Compile the D classes
+# Compile the D classes (create object files)
 add_custom_command(
   OUTPUT ${VTK_BINARY_DIR}/d/dc_stamp.txt
   DEPENDS ${VTK_D_SOURCE_FILES}
@@ -315,9 +246,10 @@ add_custom_command(
   COMMENT "Compiling D Classes"
   )
 
-# Create the JAR file containing all compiled classes and
+# Create the JAR file containing all compiled classes 
+# (link to single .lib file)
 add_custom_command(
-  COMMAND ${D_ARCHIVE} -cvf  "${VTK_JAR_PATH}/vtk.jar"
+  COMMAND ${D_ARCHIVE} -cvf  "${VTK_JAR_PATH}/vtkd.jar"
   -C ${VTK_BINARY_DIR}/d
   vtk
   DEPENDS ${VTK_BINARY_DIR}/d/dc_stamp.txt ${D_LIBRARIES}
