@@ -63,6 +63,9 @@ macro(vtk_module _name)
     elseif("${arg}" MATCHES "^EXCLUDE_FROM_WRAPPING$")
       set(_doing "")
       set(${vtk-module}_EXCLUDE_FROM_WRAPPING 1)
+    elseif("${arg}" MATCHES "^EXCLUDE_FROM_\([A-Z]+\)_WRAPPING$")
+      set(_doing "")
+      set(${vtk-module}_EXCLUDE_FROM_${CMAKE_MATCH_1}_WRAPPING 1)
     elseif("${arg}" MATCHES "^EXCLUDE_FROM_WRAP_HIERARCHY$")
       set(_doing "")
       set(${vtk-module}_EXCLUDE_FROM_WRAP_HIERARCHY 1)
@@ -170,6 +173,42 @@ macro(vtk_module_impl)
 
   if(${vtk-module}_THIRD_PARTY)
     vtk_module_warnings_disable(C CXX)
+  endif()
+endmacro()
+
+# vtk_module_export_code_find_package(<name>)
+#
+# Add code that runs when the module is loaded in an application
+# to find the given package in the same place VTK found it.
+# This is useful for finding external dependencies that provide
+# imported targets linked by VTK libraries.
+#
+# The <name>_DIR variable must be set to the package location.
+# The VTK_INSTALL_FIND_PACKAGE_<name>_DIR variable may be set
+# to an alternative location for the install tree to reference,
+# or to a false value to remove any default location.
+macro(vtk_module_export_code_find_package _name)
+  if(${_name}_DIR)
+    if(DEFINED VTK_INSTALL_FIND_PACKAGE_${_name}_DIR)
+      set(_dir "${VTK_INSTALL_FIND_PACKAGE_${_name}_DIR}")
+    else()
+      set(_dir "${${_name}_DIR}")
+    endif()
+    if(_dir)
+      set(${vtk-module}_EXPORT_CODE_INSTALL "${${vtk-module}_EXPORT_CODE_INSTALL}
+if(NOT ${_name}_DIR)
+  set(${_name}_DIR \"${_dir}\")
+endif()")
+    endif()
+    set(${vtk-module}_EXPORT_CODE_INSTALL "${${vtk-module}_EXPORT_CODE_INSTALL}
+find_package(${_name} REQUIRED QUIET)
+")
+    set(${vtk-module}_EXPORT_CODE_BUILD "${${vtk-module}_EXPORT_CODE_BUILD}
+if(NOT ${_name}_DIR)
+  set(${_name}_DIR \"${${_name}_DIR}\")
+endif()
+find_package(${_name} REQUIRED QUIET)
+")
   endif()
 endmacro()
 
